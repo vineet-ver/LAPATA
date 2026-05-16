@@ -1,0 +1,6 @@
+{
+  "name": "Lapata",
+  "description": "An AI-powered missing person platform for reconnecting families through memory-based search, smart matching, and community assistance.",
+  "requestFramePermissions": ["camera", "microphone", "geolocation"],
+  "majorCapabilities": []
+}
