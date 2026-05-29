@@ -18,39 +18,27 @@ export function Navbar() {
     setIsAuthModalOpen(true);
   };
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     console.log("handleLogout triggered");
     setIsMenuOpen(false);
-    try {
-      // 1. Sign out via Supabase Client
-      await supabase.auth.signOut();
-      
-      // 2. Sweep local storage of any Supabase tokens to ensure absolute state wipe
-      Object.keys(localStorage).forEach((key) => {
-        if (key.includes('sb-') || key.includes('supabase')) {
-          localStorage.removeItem(key);
-        }
-      });
 
-      toast.success('Signed out successfully');
-      navigate('/');
-      
-      // 3. Force-reload to flush memory context
-      window.location.reload();
-    } catch (error: any) {
-      console.error("SignOut exception:", error);
-      
-      // Force clean as fallback
-      Object.keys(localStorage).forEach((key) => {
-        if (key.includes('sb-') || key.includes('supabase')) {
-          localStorage.removeItem(key);
-        }
-      });
-      
-      toast.success('Signed out successfully');
-      navigate('/');
-      window.location.reload();
-    }
+    // 1. Request backend sign out asynchronously (fire-and-forget)
+    supabase.auth.signOut().catch((err) => {
+      console.warn("Supabase background signOut warning:", err);
+    });
+
+    // 2. Instantly wipe all Supabase auth keys from localStorage
+    Object.keys(localStorage).forEach((key) => {
+      if (key.includes('sb-') || key.includes('supabase')) {
+        localStorage.removeItem(key);
+      }
+    });
+
+    toast.success('Signed out successfully');
+    navigate('/');
+    
+    // 3. Force-reload to flush memory context instantly
+    window.location.reload();
   };
 
   const navLinks = [
