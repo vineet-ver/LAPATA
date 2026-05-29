@@ -50,15 +50,16 @@ async function startServer() {
 
       const authHeader = 'Basic ' + Buffer.from(cloudinaryApiKey + ':' + cloudinaryApiSecret).toString('base64');
       
-      const formData = new FormData();
+      const formData = new URLSearchParams();
       formData.append("file", image);
 
       const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudinaryCloudName}/image/upload`, {
         method: "POST",
         headers: {
-          "Authorization": authHeader
+          "Authorization": authHeader,
+          "Content-Type": "application/x-www-form-urlencoded"
         },
-        body: formData
+        body: formData.toString()
       });
 
       const result = await response.json() as any;

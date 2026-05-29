@@ -18,15 +18,27 @@ export function Navbar() {
     setIsAuthModalOpen(true);
   };
 
-  const handleLogout = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      toast.success('Signed out');
-      navigate('/');
-    } catch (error) {
-      toast.error('Failed to sign out');
-    }
+  const handleLogout = () => {
+    console.log("handleLogout triggered");
+    setIsMenuOpen(false);
+
+    // 1. Request backend sign out asynchronously (fire-and-forget)
+    supabase.auth.signOut().catch((err) => {
+      console.warn("Supabase background signOut warning:", err);
+    });
+
+    // 2. Instantly wipe all Supabase auth keys from localStorage
+    Object.keys(localStorage).forEach((key) => {
+      if (key.includes('sb-') || key.includes('supabase')) {
+        localStorage.removeItem(key);
+      }
+    });
+
+    toast.success('Signed out successfully');
+    navigate('/');
+    
+    // 3. Force-reload to flush memory context instantly
+    window.location.reload();
   };
 
   const navLinks = [

@@ -54,12 +54,41 @@ export function Report() {
   const nextStep = () => setStep(s => s + 1);
   const prevStep = () => setStep(s => s - 1);
 
-  const readFileAsDataURL = (file: File): Promise<string> => {
+  const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 0.85): Promise<string> => {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(img.src);
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Failed to get 2d context for image compression"));
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressedBase64 = canvas.toDataURL("image/jpeg", quality);
+        resolve(compressedBase64);
+      };
+      img.onerror = (err) => reject(err);
     });
   };
 
@@ -67,16 +96,17 @@ export function Report() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Image file must be less than 5MB");
+    // Resizing will happen automatically, but we still do a safe check for extreme files
+    if (file.size > 15 * 1024 * 1024) {
+      toast.error("Image file must be less than 15MB");
       return;
     }
 
     setUploading(true);
-    const toastId = toast.loading("Uploading photo to Cloudinary...");
+    const toastId = toast.loading("Compressing and uploading photo to Cloudinary...");
 
     try {
-      const base64data = await readFileAsDataURL(file);
+      const base64data = await compressImage(file);
       
       const res = await fetch("/api/upload", {
         method: "POST",
