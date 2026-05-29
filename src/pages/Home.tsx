@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { collection, query, where, limit, orderBy, getDocs } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 import { MissingPerson } from '../types';
 import { CaseCard } from '../components/ui/CaseCard';
 import { Search, Heart, Shield, Users, ArrowRight, Brain } from 'lucide-react';
@@ -16,15 +15,15 @@ export function Home() {
   useEffect(() => {
     const fetchCases = async () => {
       try {
-        const q = query(
-          collection(db, 'missing_persons'),
-          where('status', '==', 'ACTIVE'),
-          orderBy('createdAt', 'desc'),
-          limit(3)
-        );
-        const snapshot = await getDocs(q);
-        const cases = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MissingPerson));
-        setRecentCases(cases);
+        const { data, error } = await supabase
+          .from('missing_persons')
+          .select('*')
+          .eq('status', 'ACTIVE')
+          .order('createdAt', { ascending: false })
+          .limit(3);
+
+        if (error) throw error;
+        setRecentCases((data || []) as MissingPerson[]);
       } catch (error) {
         console.error('Error fetching cases:', error);
       } finally {

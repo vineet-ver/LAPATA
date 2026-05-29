@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 import { MissingPerson } from '../types';
 import { CaseCard } from '../components/ui/CaseCard';
 import { Search as SearchIcon, Filter, SlidersHorizontal, MapPin, Loader2 } from 'lucide-react';
@@ -18,10 +17,14 @@ export function Search() {
     const fetchCases = async () => {
       setLoading(true);
       try {
-        let q = query(collection(db, 'missing_persons'), where('status', '==', 'ACTIVE'), orderBy('createdAt', 'desc'));
-        
-        const snapshot = await getDocs(q);
-        let allCases = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MissingPerson));
+        const { data, error } = await supabase
+          .from('missing_persons')
+          .select('*')
+          .eq('status', 'ACTIVE')
+          .order('createdAt', { ascending: false });
+
+        if (error) throw error;
+        let allCases = (data || []) as MissingPerson[];
         
         // Manual filtering for complex queries (Firestore has limits on complex queries without indexes)
         if (searchTerm) {

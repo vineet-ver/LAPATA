@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getAI } from '../lib/gemini';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 import { MissingPerson } from '../types';
 import { CaseCard } from '../components/ui/CaseCard';
 import { MessageSquare, Send, Bot, User, Sparkles, Brain, Search, Loader2 } from 'lucide-react';
@@ -56,7 +55,7 @@ export function Chat() {
       
       const ai = getAI();
       const result = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-2.5-flash",
         contents: prompt
       });
       
@@ -75,9 +74,13 @@ export function Chat() {
   };
 
   const findMatches = async (info: any) => {
-    const q = query(collection(db, 'missing_persons'), where('status', '==', 'ACTIVE'));
-    const snapshot = await getDocs(q);
-    const allCases = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MissingPerson));
+    const { data, error } = await supabase
+      .from('missing_persons')
+      .select('*')
+      .eq('status', 'ACTIVE');
+
+    if (error) throw error;
+    const allCases = (data || []) as MissingPerson[];
     
     // Simple heuristic matching
     return allCases.filter(c => {

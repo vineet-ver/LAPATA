@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db, auth } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 import { MissingPerson, FoundReport } from '../types';
 import { useAuth } from '../components/auth/AuthProvider';
 import { Link, useNavigate } from 'react-router-dom';
@@ -22,10 +21,13 @@ export function Dashboard() {
       if (!user || myCases.length === 0) return;
       try {
         const personIds = myCases.map(c => c.id);
-        // Firestore 'in' query has 10 item limit, but for simplicity:
-        const q = query(collection(db, 'found_reports'), where('missingPersonId', 'in', personIds.slice(0, 10)));
-        const snapshot = await getDocs(q);
-        setHelperReports(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FoundReport)));
+        const { data, error } = await supabase
+          .from('found_reports')
+          .select('*')
+          .in('missingPersonId', personIds.slice(0, 10));
+
+        if (error) throw error;
+        setHelperReports((data || []) as FoundReport[]);
       } catch (error) {
         console.error('Error fetching helper reports:', error);
       }
@@ -35,7 +37,13 @@ export function Dashboard() {
 
   const updateReportStatus = async (reportId: string, status: string) => {
       try {
-          await updateDoc(doc(db, 'found_reports', reportId), { status });
+          const { error } = await supabase
+            .from('found_reports')
+            .update({ status })
+            .eq('id', reportId);
+
+          if (error) throw error;
+
           setHelperReports(prev => prev.map(r => r.id === reportId ? { ...r, status: status as any } : r));
           toast.success(`Report ${status.toLowerCase()}`);
       } catch (error) {
@@ -46,10 +54,13 @@ export function Dashboard() {
     const fetchMyCases = async () => {
       if (!user) return;
       try {
-        const q = query(collection(db, 'missing_persons'), where('reporterId', '==', user.uid));
-        const snapshot = await getDocs(q);
-        const cases = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MissingPerson));
-        setMyCases(cases);
+        const { data, error } = await supabase
+          .from('missing_persons')
+          .select('*')
+          .eq('reporterId', user.uid);
+
+        if (error) throw error;
+        setMyCases((data || []) as MissingPerson[]);
       } catch (error) {
         console.error('Error fetching cases:', error);
       } finally {
@@ -62,10 +73,16 @@ export function Dashboard() {
   const toggleStatus = async (caseId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'ACTIVE' ? 'FOUND' : 'ACTIVE';
     try {
-      await updateDoc(doc(db, 'missing_persons', caseId), {
-        status: newStatus,
-        updatedAt: new Date().toISOString()
-      });
+      const { error } = await supabase
+        .from('missing_persons')
+        .update({
+          status: newStatus,
+          updatedAt: new Date().toISOString()
+        })
+        .eq('id', caseId);
+
+      if (error) throw error;
+
       setMyCases(prev => prev.map(c => c.id === caseId ? { ...c, status: newStatus as any } : c));
       toast.success(`Case marked as ${newStatus}`);
     } catch (error) {
@@ -76,7 +93,13 @@ export function Dashboard() {
   const deleteCase = async (caseId: string) => {
     if (!window.confirm('Are you sure you want to delete this report? This cannot be undone.')) return;
     try {
-      await deleteDoc(doc(db, 'missing_persons', caseId));
+      const { error } = await supabase
+        .from('missing_persons')
+        .delete()
+        .eq('id', caseId);
+
+      if (error) throw error;
+
       setMyCases(prev => prev.filter(c => c.id !== caseId));
       toast.success('Report deleted');
     } catch (error) {

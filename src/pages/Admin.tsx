@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, query, getDocs, doc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 import { MissingPerson, UserProfile } from '../types';
 import { useAuth } from '../components/auth/AuthProvider';
 import { ShieldAlert, Users, Database, ShieldCheck, Trash2, ExternalLink, Loader2, Search } from 'lucide-react';
@@ -19,11 +18,21 @@ export function Admin() {
     const fetchData = async () => {
       if (!isAdmin) return;
       try {
-        const casesSnap = await getDocs(query(collection(db, 'missing_persons'), orderBy('createdAt', 'desc')));
-        const usersSnap = await getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc')));
+        const { data: casesData, error: casesError } = await supabase
+          .from('missing_persons')
+          .select('*')
+          .order('createdAt', { ascending: false });
+
+        const { data: usersData, error: usersError } = await supabase
+          .from('users')
+          .select('*')
+          .order('createdAt', { ascending: false });
+
+        if (casesError) throw casesError;
+        if (usersError) throw usersError;
         
-        setAllCases(casesSnap.docs.map(d => ({ id: d.id, ...d.data() } as MissingPerson)));
-        setUsers(usersSnap.docs.map(d => ({ ...d.data() } as UserProfile)));
+        setAllCases((casesData || []) as MissingPerson[]);
+        setUsers((usersData || []) as UserProfile[]);
       } catch (error) {
         console.error(error);
         toast.error('Failed to load admin data');
@@ -37,7 +46,13 @@ export function Admin() {
   const removeCase = async (id: string) => {
     if (!window.confirm('Admin Action: Permanently delete this case?')) return;
     try {
-      await deleteDoc(doc(db, 'missing_persons', id));
+      const { error } = await supabase
+        .from('missing_persons')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
       setAllCases(prev => prev.filter(c => c.id !== id));
       toast.success('Case removed by admin');
     } catch (error) {
@@ -99,6 +114,7 @@ export function Admin() {
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Profile</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Reporter</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Published</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
               </tr>
             </thead>

@@ -1,11 +1,17 @@
+/// <reference types="vite/client" />
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, db } from '../../lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { supabase } from '../../lib/supabase';
 import { UserProfile } from '../../types';
 
+export interface AppUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL: string;
+}
+
 interface AuthContextType {
-  user: User | null;
+  user: AppUser | null;
   profile: UserProfile | null;
   loading: boolean;
   isAdmin: boolean;
@@ -14,36 +20,82 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({ user: null, profile: null, loading: true, isAdmin: false });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    return onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      if (user) {
-        const docRef = doc(db, 'users', user.uid);
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-          setProfile(docSnap.data() as UserProfile);
+  const handleAuthStateChange = async (supabaseUser: any) => {
+    if (supabaseUser) {
+      const appUser: AppUser = {
+        uid: supabaseUser.id,
+        email: supabaseUser.email || '',
+        displayName: supabaseUser.user_metadata?.displayName || supabaseUser.email?.split('@')[0] || 'User',
+        photoURL: supabaseUser.user_metadata?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${supabaseUser.id}`,
+      };
+      
+      setUser(appUser);
+
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('uid', appUser.uid)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (data) {
+          setProfile(data as UserProfile);
         } else {
           const newProfile: UserProfile = {
-            uid: user.uid,
-            email: user.email || '',
-            displayName: user.displayName || '',
-            photoURL: user.photoURL || '',
+            uid: appUser.uid,
+            email: appUser.email,
+            displayName: appUser.displayName,
+            photoURL: appUser.photoURL,
             role: 'reporter',
             createdAt: new Date().toISOString(),
           };
-          await setDoc(docRef, newProfile);
+          
+          const { error: upsertError } = await supabase
+            .from('users')
+            .upsert(newProfile);
+
+          if (upsertError) throw upsertError;
+
           setProfile(newProfile);
         }
-      } else {
-        setProfile(null);
+      } catch (error) {
+        console.error("Error setting Supabase user profile:", error);
       }
-      setLoading(false);
+    } else {
+      setUser(null);
+      setProfile(null);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    // Initial fetch of current session
+    const checkUser = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        await handleAuthStateChange(session?.user || null);
+      } catch (error) {
+        console.error("Error checking Supabase session:", error);
+        setLoading(false);
+      }
+    };
+
+    checkUser();
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      await handleAuthStateChange(session?.user || null);
     });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const value = {

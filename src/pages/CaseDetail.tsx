@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 import { MissingPerson, FoundReport } from '../types';
 import { MapPin, Calendar, Clock, Phone, MessageSquare, Share2, AlertTriangle, CheckCircle, ChevronLeft, Loader2, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -19,10 +18,15 @@ export function CaseDetail() {
     const fetchCase = async () => {
       if (!id) return;
       try {
-        const docRef = doc(db, 'missing_persons', id);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setPerson({ id: docSnap.id, ...docSnap.data() } as MissingPerson);
+        const { data, error } = await supabase
+          .from('missing_persons')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (data) {
+          setPerson(data as MissingPerson);
         }
       } catch (error) {
         console.error('Error fetching case:', error);
@@ -42,16 +46,16 @@ export function CaseDetail() {
     const formData = new FormData(e.currentTarget);
     const data = {
       missingPersonId: id,
-      helperName: formData.get('helperName'),
-      helperPhone: formData.get('helperPhone'),
-      currentLocation: formData.get('currentLocation'),
-      notes: formData.get('notes'),
+      helperName: formData.get('helperName') as string,
+      helperPhone: formData.get('helperPhone') as string,
+      currentLocation: formData.get('currentLocation') as string,
+      notes: formData.get('notes') as string,
       status: 'PENDING',
-      createdAt: serverTimestamp(),
     };
 
     try {
-      await addDoc(collection(db, 'found_reports'), data);
+      const { error } = await supabase.from('found_reports').insert(data);
+      if (error) throw error;
       toast.success('Information submitted! Thank you for your help.');
       setShowFoundForm(false);
     } catch (error) {

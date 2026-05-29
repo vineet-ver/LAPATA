@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../components/auth/AuthProvider';
-import { auth, db, googleProvider } from '../lib/firebase';
-import { signInWithPopup } from 'firebase/auth';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
+import { AuthModal } from '../components/auth/AuthModal';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, ChevronLeft, Upload, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
@@ -41,6 +40,9 @@ export function Report() {
   const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const navigate = useNavigate();
   const { register, handleSubmit, watch, formState: { errors } } = useForm<FormData>({
       defaultValues: {
@@ -52,29 +54,96 @@ export function Report() {
   const nextStep = () => setStep(s => s + 1);
   const prevStep = () => setStep(s => s - 1);
 
-  const handleLogin = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-      toast.success('Signed in! Now you can create a report.');
-    } catch (error) {
-      toast.error('Failed to sign in');
+  const readFileAsDataURL = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image file must be less than 5MB");
+      return;
     }
+
+    setUploading(true);
+    const toastId = toast.loading("Uploading photo to Cloudinary...");
+
+    try {
+      const base64data = await readFileAsDataURL(file);
+      
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ image: base64data })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to upload image");
+      }
+
+      setPhotoUrl(data.url);
+      toast.success("Photo uploaded successfully!", { id: toastId });
+    } catch (err: any) {
+      console.error("Upload error:", err);
+      toast.error(err.message || "Failed to upload photo", { id: toastId });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleLogin = () => {
+    setIsAuthModalOpen(true);
   };
 
   const onSubmit = async (data: FormData) => {
     if (!user) return;
     setIsSubmitting(true);
     try {
-      const docRef = await addDoc(collection(db, 'missing_persons'), {
-        ...data,
-        reporterId: user.uid,
-        status: 'ACTIVE',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        photoUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.fullName}-${Date.now()}` // Default placeholder
+      const cleanedData = { ...data };
+
+      // Ensure proper numeric types
+      if (cleanedData.age) {
+        cleanedData.age = Number(cleanedData.age);
+      }
+      if (cleanedData.rewardAvailable && cleanedData.rewardAmount) {
+        cleanedData.rewardAmount = Number(cleanedData.rewardAmount);
+      } else {
+        delete cleanedData.rewardAmount;
+      }
+
+      // Remove any empty strings, null, or undefined values
+      Object.keys(cleanedData).forEach((key) => {
+        const val = cleanedData[key as keyof typeof cleanedData];
+        if (val === "" || val === undefined || val === null) {
+          delete cleanedData[key as keyof typeof cleanedData];
+        }
       });
+
+      const { data: insertedData, error } = await supabase
+        .from('missing_persons')
+        .insert({
+          ...cleanedData,
+          reporterId: user.uid,
+          status: 'ACTIVE',
+          photoUrl: photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.fullName}-${Date.now()}`
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
       toast.success('Report filed successfully!');
-      navigate(`/case/${docRef.id}`);
+      navigate(`/case/${insertedData.id}`);
     } catch (error) {
       console.error(error);
       toast.error('Failed to file report');
@@ -102,9 +171,10 @@ export function Report() {
             onClick={handleLogin}
             className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-base hover:bg-blue-700 transition-all shadow-lg active:scale-95"
           >
-            Sign in with Google
+            Sign In / Sign Up
           </button>
         </motion.div>
+        <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
       </div>
     );
   }
@@ -163,7 +233,7 @@ export function Report() {
                   <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Approximate Age *</label>
                   <input
                     type="number"
-                    {...register('age', { required: true, min: 0 })}
+                    {...register('age', { required: true, min: 0, valueAsNumber: true })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 focus:ring-2 focus:ring-blue-500/20 focus:outline-none focus:bg-white transition-all"
                     placeholder="Age in years"
                   />
@@ -192,11 +262,45 @@ export function Report() {
                 />
               </div>
 
-              <div className="p-8 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50 text-center flex flex-col items-center">
-                <Upload className="w-8 h-8 text-slate-400 mb-4" />
-                <h4 className="font-bold text-slate-800 mb-1">Upload Photo</h4>
-                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">JPG, PNG up to 5MB</p>
-                <div className="mt-4 text-[9px] font-bold text-orange-600 bg-orange-50 px-4 py-1.5 rounded-full border border-orange-100 uppercase tracking-widest">Placeholder will be used for demo</div>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Photo</label>
+                <div className="relative group">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                    id="photo-upload-input"
+                    disabled={uploading}
+                  />
+                  <label
+                    htmlFor="photo-upload-input"
+                    className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-2xl bg-slate-50 hover:bg-slate-50/50 p-8 text-center cursor-pointer transition-all min-h-[160px]"
+                  >
+                    {uploading ? (
+                      <div className="flex flex-col items-center">
+                        <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-4" />
+                        <h4 className="font-bold text-slate-800 mb-1">Uploading...</h4>
+                        <p className="text-[10px] font-bold text-slate-400 tracking-wider">Sending secure payload to Cloudinary</p>
+                      </div>
+                    ) : photoUrl ? (
+                      <div className="relative flex flex-col items-center">
+                        <img src={photoUrl} alt="Preview" className="w-24 h-24 object-cover rounded-xl shadow-md mb-2 border border-slate-100" />
+                        <h4 className="font-bold text-green-600 mb-1 text-sm flex items-center gap-1">
+                          <CheckCircle className="w-4 h-4" /> Uploaded!
+                        </h4>
+                        <p className="text-[9px] font-bold text-slate-400 tracking-wider">Click or drag another to replace</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center">
+                        <Upload className="w-8 h-8 text-slate-400 mb-4 group-hover:text-blue-500 transition-colors" />
+                        <h4 className="font-bold text-slate-800 mb-1">Upload Photo</h4>
+                        <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">JPG, PNG up to 5MB</p>
+                        <div className="mt-4 text-[9px] font-bold text-blue-600 bg-blue-50 px-4 py-1.5 rounded-full border border-blue-100 uppercase tracking-widest">Powered by Cloudinary</div>
+                      </div>
+                    )}
+                  </label>
+                </div>
               </div>
             </motion.div>
           )}
@@ -399,7 +503,7 @@ export function Report() {
                     <label className="text-sm font-bold text-gray-700 ml-1">Reward Amount (INR)</label>
                     <input
                       type="number"
-                      {...register('rewardAmount', { required: true, min: 0 })}
+                      {...register('rewardAmount', { required: true, min: 0, valueAsNumber: true })}
                       className="w-full bg-white border-none rounded-2xl p-4 focus:ring-2 focus:ring-blue-100 transition-all font-bold text-blue-600"
                       placeholder="e.g. 10000"
                     />

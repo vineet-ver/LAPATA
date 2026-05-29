@@ -1,8 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Search, PlusCircle, MessageSquare, User, LogOut, Menu, X, Shield } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
-import { auth, googleProvider } from '../../lib/firebase';
-import { signInWithPopup, signOut } from 'firebase/auth';
+import { supabase } from '../../lib/supabase';
+import { AuthModal } from '../auth/AuthModal';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../lib/utils';
@@ -12,19 +12,16 @@ export function Navbar() {
   const { user, profile, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  const handleLogin = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-      toast.success('Signed in successfully');
-    } catch (error) {
-      toast.error('Failed to sign in');
-    }
+  const handleLogin = () => {
+    setIsAuthModalOpen(true);
   };
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
       toast.success('Signed out');
       navigate('/');
     } catch (error) {
@@ -162,6 +159,7 @@ export function Navbar() {
           </motion.div>
         )}
       </AnimatePresence>
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
     </nav>
   );
 }
