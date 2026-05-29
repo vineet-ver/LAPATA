@@ -19,13 +19,37 @@ export function Navbar() {
   };
 
   const handleLogout = async () => {
+    console.log("handleLogout triggered");
+    setIsMenuOpen(false);
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      toast.success('Signed out');
+      // 1. Sign out via Supabase Client
+      await supabase.auth.signOut();
+      
+      // 2. Sweep local storage of any Supabase tokens to ensure absolute state wipe
+      Object.keys(localStorage).forEach((key) => {
+        if (key.includes('sb-') || key.includes('supabase')) {
+          localStorage.removeItem(key);
+        }
+      });
+
+      toast.success('Signed out successfully');
       navigate('/');
-    } catch (error) {
-      toast.error('Failed to sign out');
+      
+      // 3. Force-reload to flush memory context
+      window.location.reload();
+    } catch (error: any) {
+      console.error("SignOut exception:", error);
+      
+      // Force clean as fallback
+      Object.keys(localStorage).forEach((key) => {
+        if (key.includes('sb-') || key.includes('supabase')) {
+          localStorage.removeItem(key);
+        }
+      });
+      
+      toast.success('Signed out successfully');
+      navigate('/');
+      window.location.reload();
     }
   };
 
