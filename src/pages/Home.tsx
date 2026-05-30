@@ -54,11 +54,11 @@ export function Home() {
   };
 
   return (
-    <div className="flex flex-col gap-6 p-6 pb-24">
+    <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 pb-24 flex flex-col gap-6">
       {/* Top Section: Search & Welcome */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-12">
-          <div className="bg-white rounded-2xl p-8 shadow-sm border border-slate-200">
+          <div className="bg-white rounded-2xl p-4 sm:p-8 shadow-sm border border-slate-200">
             <div className="max-w-4xl">
               <h1 className="text-3xl font-black text-slate-800 tracking-tight mb-2">Memory Fragment Search</h1>
               <p className="text-slate-500 mb-8">Search by mother name, village, school, or landmark to help find missing persons.</p>
@@ -80,8 +80,8 @@ export function Home() {
                 </button>
               </form>
               
-              <div className="flex items-center gap-3 mt-4">
-                <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Suggested:</span>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-4">
+                <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mr-1">Suggested:</span>
                 <button onClick={() => setSearchQuery('Near railway station')} className="text-[11px] bg-slate-100 px-3 py-1.5 rounded-lg text-slate-600 font-medium hover:bg-slate-200">"Near railway station"</button>
                 <button onClick={() => setSearchQuery('Lives in Rohini')} className="text-[11px] bg-slate-100 px-3 py-1.5 rounded-lg text-slate-600 font-medium hover:bg-slate-200">"Lives in Rohini"</button>
                 <button onClick={() => setSearchQuery('Father Amit')} className="text-[11px] bg-slate-100 px-3 py-1.5 rounded-lg text-slate-600 font-medium hover:bg-slate-200">"Father Amit"</button>

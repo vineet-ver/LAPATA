@@ -15,7 +15,7 @@
 
 @layer base {
   body {
-    @apply antialiased text-slate-900 bg-slate-50;
+    @apply antialiased text-slate-900 bg-slate-50 overflow-x-hidden max-w-full;
   }
 }
 
